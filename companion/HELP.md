@@ -40,3 +40,4 @@ This module controls AG Neovo displays that support the SICP RS232 protocol over
 - RS232 command flow is sequential; this module uses a single-command queue.
 - If a monitor ID is wrong, many models return no response. In that case commands will time out.
 - Some protocol fields vary by model/firmware. Unsupported commands may return NAV/NACK.
+- For protocol troubleshooting, enable `Enable verbose debug logging` in the module config to log TX/RX frames, retries, timeouts, and ACK/NACK details.

@@ -7,6 +7,7 @@ export interface ModuleConfig {
 	timeoutMs: number
 	retries: number
 	pollInterval: number
+	debugLogging: boolean
 }
 
 export function GetConfigFields(): SomeCompanionConfigField[] {
@@ -62,6 +63,13 @@ export function GetConfigFields(): SomeCompanionConfigField[] {
 			min: 0,
 			max: 60000,
 			default: 5000,
+		},
+		{
+			type: 'checkbox',
+			id: 'debugLogging',
+			label: 'Enable verbose debug logging',
+			width: 12,
+			default: false,
 		},
 	]
 }

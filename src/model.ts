@@ -41,5 +41,14 @@ const InputLabelById = new Map<number, string>(InputChoices.map((choice) => [cho
 
 export function inputCodeToLabel(inputCode: number | null): string {
 	if (inputCode === null) return 'Unknown'
-	return InputLabelById.get(inputCode) ?? `Unknown (0x${inputCode.toString(16).padStart(2, '0')})`
+	const directLabel = InputLabelById.get(inputCode)
+	if (directLabel) return directLabel
+
+	const normalizedCode = inputCode & 0x1f
+	const normalizedLabel = InputLabelById.get(normalizedCode)
+	if (normalizedLabel) {
+		return `${normalizedLabel} (ext 0x${inputCode.toString(16).padStart(2, '0')})`
+	}
+
+	return `Unknown (0x${inputCode.toString(16).padStart(2, '0')})`
 }

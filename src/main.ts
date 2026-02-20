@@ -138,6 +138,7 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 		client.on('connected', () => {
 			this.state.connection = 'connected'
 			this.updateStatus(InstanceStatus.Ok)
+			this.log('debug', 'Connected to display')
 			this.updateAllVariables()
 			this.checkFeedbacks()
 			void this.refreshState()
@@ -145,11 +146,59 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 		})
 
 		client.on('disconnected', (error?: Error) => {
+			this.log('debug', `Disconnected from display: ${error?.message ?? 'Connection closed'}`)
 			this.setDisconnectedState(error?.message ?? 'Connection closed')
 		})
 
 		client.on('report', () => {
 			this.checkFeedbacks()
+		})
+
+		client.on('tx', (event) => {
+			if (!this.isVerboseDebugEnabled()) return
+			this.log(
+				'debug',
+				`TX cmd=0x${event.commandCode.toString(16).padStart(2, '0')} attempt=${event.attempt} left=${event.attemptsRemaining} data=${event.packetHex}`,
+			)
+		})
+
+		client.on('retry', (event) => {
+			if (!this.isVerboseDebugEnabled()) return
+			this.log(
+				'debug',
+				`Retry cmd=0x${event.commandCode.toString(16).padStart(2, '0')} left=${event.attemptsRemaining}`,
+			)
+		})
+
+		client.on('timeout', (event) => {
+			if (!this.isVerboseDebugEnabled()) return
+			this.log('debug', `Timeout cmd=0x${event.commandCode.toString(16).padStart(2, '0')}`)
+		})
+
+		client.on('rx_raw', (event) => {
+			if (!this.isVerboseDebugEnabled()) return
+			this.log('debug', `RX raw bytes=${event.size} data=${event.chunkHex}`)
+		})
+
+		client.on('rx_frame', (event) => {
+			if (!this.isVerboseDebugEnabled()) return
+			this.log('debug', `RX frame monitor=${event.monitorId} data=${event.dataHex}`)
+		})
+
+		client.on('command_ok', (event) => {
+			if (!this.isVerboseDebugEnabled()) return
+			this.log(
+				'debug',
+				`Command OK cmd=0x${event.commandCode.toString(16).padStart(2, '0')} response=${event.responseHex || '<none>'}`,
+			)
+		})
+
+		client.on('command_error', (event) => {
+			if (!this.isVerboseDebugEnabled()) return
+			this.log(
+				'debug',
+				`Command error cmd=0x${event.commandCode.toString(16).padStart(2, '0')} status=0x${event.status.toString(16).padStart(2, '0')} ${event.statusText}`,
+			)
 		})
 
 		this.client = client
@@ -190,6 +239,7 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 
 	private async refreshState(): Promise<void> {
 		if (!this.client?.isConnected) return
+		if (this.isVerboseDebugEnabled()) this.log('debug', 'Starting poll cycle')
 
 		try {
 			const power = await this.client.getPower()
@@ -200,11 +250,17 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 			this.log('warn', `Power poll failed: ${formatError(error)}`)
 		}
 
+		if (this.state.power !== 'on') {
+			this.updateAllVariables()
+			this.checkFeedbacks()
+			return
+		}
+
 		try {
 			const input = await this.client.getInput()
 			if (typeof input === 'number') this.state.inputCode = input
 		} catch (error) {
-			this.log('warn', `Input poll failed: ${formatError(error)}`)
+			this.log(isRejectedCommandError(error) ? 'debug' : 'warn', `Input poll failed: ${formatError(error)}`)
 		}
 
 		try {
@@ -214,13 +270,22 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 				this.state.audioOutVolume = volume.audioOutVolume
 			}
 		} catch (error) {
-			this.log('warn', `Volume poll failed: ${formatError(error)}`)
+			this.log(isRejectedCommandError(error) ? 'debug' : 'warn', `Volume poll failed: ${formatError(error)}`)
 		}
 
 		try {
-			this.state.model = (await this.client.getDeviceInfo(0x00)) ?? this.state.model
-			this.state.fwVersion = (await this.client.getDeviceInfo(0x01)) ?? this.state.fwVersion
-			this.state.buildDate = (await this.client.getDeviceInfo(0x02)) ?? this.state.buildDate
+			const modelInfo = await this.client.getDeviceInfo(0x00)
+			const fwInfo = await this.client.getDeviceInfo(0x01)
+			const buildInfo = await this.client.getDeviceInfo(0x02)
+
+			const platformLabel = isUnsupportedInfo(modelInfo) ? await this.client.getPlatformInfo(0x01) : undefined
+			const platformVersion = isUnsupportedInfo(fwInfo) ? await this.client.getPlatformInfo(0x02) : undefined
+			const sicpVersion = isUnsupportedInfo(buildInfo) ? await this.client.getPlatformInfo(0x00) : undefined
+
+			this.state.model = platformLabel ?? modelInfo ?? this.state.model
+			this.state.fwVersion =
+				platformVersion ?? (isUnsupportedInfo(fwInfo) ? sicpVersion : fwInfo) ?? this.state.fwVersion
+			this.state.buildDate = sicpVersion ?? buildInfo ?? this.state.buildDate
 		} catch (error) {
 			this.log('debug', `Device info poll failed: ${formatError(error)}`)
 		}
@@ -233,6 +298,7 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 
 		this.updateAllVariables()
 		this.checkFeedbacks()
+		if (this.isVerboseDebugEnabled()) this.log('debug', 'Completed poll cycle')
 	}
 
 	private updateAllVariables(): void {
@@ -249,6 +315,10 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 			operating_hours: this.state.operatingHours === null ? '' : String(this.state.operatingHours),
 		})
 	}
+
+	private isVerboseDebugEnabled(): boolean {
+		return Boolean(this.config.debugLogging)
+	}
 }
 
 runEntrypoint(ModuleInstance, UpgradeScripts)
@@ -260,4 +330,13 @@ function clampPercent(value: number): number {
 function formatError(error: unknown): string {
 	if (error instanceof Error) return error.message
 	return String(error)
+}
+
+function isRejectedCommandError(error: unknown): boolean {
+	if (!(error instanceof Error)) return false
+	return error.message === 'Command canceled or NACK' || error.message === 'Parse error or NAV'
+}
+
+function isUnsupportedInfo(value: string | undefined): boolean {
+	return Boolean(value?.startsWith('Unsupported (0x'))
 }

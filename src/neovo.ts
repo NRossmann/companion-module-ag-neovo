@@ -9,6 +9,7 @@ export const NeovoCommands = {
 	volumeSet: 0x44,
 	volumeGet: 0x45,
 	deviceInfo: 0xa1,
+	platformInfo: 0xa2,
 	miscInfo: 0x0f,
 } as const
 
@@ -140,7 +141,7 @@ export class AgNeovoClient extends EventEmitter {
 
 	async getInput(): Promise<number | undefined> {
 		const response = await this.sendCommand(NeovoCommands.inputGet, [], { expectReportCode: NeovoCommands.inputGet })
-		return response?.[0]
+		return decodeInputResponse(response)
 	}
 
 	async setVolume(volume: number, audioOutVolume: number): Promise<void> {
@@ -149,7 +150,10 @@ export class AgNeovoClient extends EventEmitter {
 
 	async getVolume(): Promise<{ volume: number; audioOutVolume: number } | undefined> {
 		const response = await this.sendCommand(NeovoCommands.volumeGet, [], { expectReportCode: NeovoCommands.volumeGet })
-		if (!response || response.length < 2) return undefined
+		if (!response || response.length === 0) return undefined
+		if (response.length === 1) {
+			return { volume: response[0], audioOutVolume: response[0] }
+		}
 		return { volume: response[0], audioOutVolume: response[1] }
 	}
 
@@ -158,6 +162,9 @@ export class AgNeovoClient extends EventEmitter {
 			expectReportCode: NeovoCommands.deviceInfo,
 		})
 		if (!response || response.length === 0) return undefined
+		if (response.length === 1 && response[0] < 0x20) {
+			return `Unsupported (0x${response[0].toString(16).padStart(2, '0')})`
+		}
 		return Buffer.from(response).toString('utf8').replace(/\0/g, '').trim()
 	}
 
@@ -165,8 +172,16 @@ export class AgNeovoClient extends EventEmitter {
 		const response = await this.sendCommand(NeovoCommands.miscInfo, [0x02], {
 			expectReportCode: NeovoCommands.miscInfo,
 		})
-		if (!response || response.length < 3 || response[0] !== 0x02) return undefined
-		return (response[1] << 8) | response[2]
+		return decodeOperatingHoursResponse(response)
+	}
+
+	async getPlatformInfo(item: number): Promise<string | undefined> {
+		const response = await this.sendCommand(NeovoCommands.platformInfo, [item], {
+			expectReportCode: NeovoCommands.platformInfo,
+		})
+		if (!response || response.length === 0) return undefined
+		if (response.length === 1 && response[0] < 0x20) return undefined
+		return Buffer.from(response).toString('utf8').replace(/\0/g, '').trim()
 	}
 
 	private async sendCommand(
@@ -206,23 +221,39 @@ export class AgNeovoClient extends EventEmitter {
 
 		const item = this.current
 		item.attemptsLeft -= 1
+		const commandCode = item.packet[7] ?? 0xff
+		this.emit('tx', {
+			packetHex: toHex(item.packet),
+			commandCode,
+			attempt: this.options.retries + 1 - item.attemptsLeft,
+			attemptsRemaining: item.attemptsLeft,
+		})
 		this.socket.write(item.packet)
 
 		if (item.timer) clearTimeout(item.timer)
 		item.timer = setTimeout(() => {
 			if (!this.current) return
 			if (item.attemptsLeft > 0) {
+				this.emit('retry', {
+					commandCode,
+					attemptsRemaining: item.attemptsLeft,
+				})
 				this.writeCurrent()
 				return
 			}
 
 			this.current = undefined
+			this.emit('timeout', { commandCode })
 			item.reject(new Error('Command timeout'))
 			this.pumpQueue()
 		}, item.timeoutMs)
 	}
 
 	private handleData(chunk: Buffer): void {
+		this.emit('rx_raw', {
+			chunkHex: toHex(chunk),
+			size: chunk.length,
+		})
 		this.rxBuffer = Buffer.concat([this.rxBuffer, chunk])
 
 		while (this.rxBuffer.length > 0) {
@@ -237,6 +268,12 @@ export class AgNeovoClient extends EventEmitter {
 	}
 
 	private handleFrame(frame: ParsedFrame): void {
+		this.emit('rx_frame', {
+			monitorId: frame.monitorId,
+			dataHex: toHex(Buffer.from(frame.data)),
+			data: frame.data,
+		})
+
 		const current = this.current
 		if (!current) {
 			this.emit('report', frame)
@@ -268,8 +305,13 @@ export class AgNeovoClient extends EventEmitter {
 	private resolveCurrentSuccess(value: number[] | null): void {
 		if (!this.current) return
 		const item = this.current
+		const commandCode = item.packet[7] ?? 0xff
 		if (item.timer) clearTimeout(item.timer)
 		this.current = undefined
+		this.emit('command_ok', {
+			commandCode,
+			responseHex: value ? toHex(Buffer.from(value)) : '',
+		})
 		item.resolve(value)
 		this.pumpQueue()
 	}
@@ -277,8 +319,14 @@ export class AgNeovoClient extends EventEmitter {
 	private resolveCurrentError(status: number): void {
 		if (!this.current) return
 		const item = this.current
+		const commandCode = item.packet[7] ?? 0xff
 		if (item.timer) clearTimeout(item.timer)
 		this.current = undefined
+		this.emit('command_error', {
+			commandCode,
+			status,
+			statusText: mapAckStatus(status),
+		})
 		item.reject(new Error(mapAckStatus(status)))
 		this.pumpQueue()
 	}
@@ -371,4 +419,35 @@ function mapAckStatus(status: number): string {
 		default:
 			return `Unknown status 0x${status.toString(16).padStart(2, '0')}`
 	}
+}
+
+function decodeInputResponse(response: number[] | null): number | undefined {
+	if (!response || response.length === 0) return undefined
+	if (response.length === 1) return response[0]
+
+	if (response[0] === 0x00 || response[0] === 0xfd) {
+		return response[1]
+	}
+
+	return response[0]
+}
+
+function decodeOperatingHoursResponse(response: number[] | null): number | undefined {
+	if (!response || response.length === 0) return undefined
+
+	if (response.length >= 3 && response[0] === 0x02) {
+		return (response[1] << 8) | response[2]
+	}
+
+	if (response.length === 2) {
+		return (response[0] << 8) | response[1]
+	}
+
+	return undefined
+}
+
+function toHex(buffer: Buffer): string {
+	return Array.from(buffer)
+		.map((value) => value.toString(16).padStart(2, '0'))
+		.join(' ')
 }
