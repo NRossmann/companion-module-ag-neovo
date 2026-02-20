@@ -1,12 +1,12 @@
 {
-	"id": "ag-neovo",
-	"name": "AG-Neovo",
-	"shortname": "AG-Neovo",
-	"description": "A module to remotely control AG-Neovo monitors via the IP Serial Interface",
+	"id": "agneovo-qxseries",
+	"name": "AG Neovo QX Series",
+	"shortname": "QX Series",
+	"description": "A module to remotely control AG Neovo QX Series monitors via the IP serial interface",
 	"version": "0.0.0",
 	"license": "MIT",
-	"repository": "git+https://github.com/NRossmann/companion-module-ag-neovo.git",
-	"bugs": "https://github.com/NRossmann/companion-module-ag-neovo/issues",
+	"repository": "git+https://github.com/NRossmann/companion-module-agneovo-qxseries.git",
+	"bugs": "https://github.com/NRossmann/companion-module-agneovo-qxseries/issues",
 	"maintainers": [
 		{
 			"name": "Nic Rossmann",
@@ -20,7 +20,7 @@
 		"entrypoint": "../dist/main.js"
 	},
 	"legacyIds": [],
-	"manufacturer": "AG-Neovo",
-	"products": ["Monitor"],
+	"manufacturer": "AG Neovo",
+	"products": ["QX-Series"],
 	"keywords": []
 }

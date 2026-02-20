@@ -1,6 +1,6 @@
-## AG Neovo (RS232 over IP)
+## AG Neovo QX Series (RS232 over IP)
 
-This module controls AG Neovo displays that support the SICP RS232 protocol over LAN.
+This module controls AG Neovo QX Series displays that support the SICP RS232 protocol over LAN.
 
 ### Connection
 
@@ -25,17 +25,17 @@ This module controls AG Neovo displays that support the SICP RS232 protocol over
 
 ### Variables
 
-- `$(ag-neovo:connection)`
-- `$(ag-neovo:power)`
-- `$(ag-neovo:input_code)`
-- `$(ag-neovo:input_label)`
-- `$(ag-neovo:brightness)`
-- `$(ag-neovo:volume)`
-- `$(ag-neovo:audio_out_volume)`
-- `$(ag-neovo:model)`
-- `$(ag-neovo:fw_version)`
-- `$(ag-neovo:build_date)`
-- `$(ag-neovo:operating_hours)`
+- `$(agneovo-qxseries:connection)`
+- `$(agneovo-qxseries:power)`
+- `$(agneovo-qxseries:input_code)`
+- `$(agneovo-qxseries:input_label)`
+- `$(agneovo-qxseries:brightness)`
+- `$(agneovo-qxseries:volume)`
+- `$(agneovo-qxseries:audio_out_volume)`
+- `$(agneovo-qxseries:model)`
+- `$(agneovo-qxseries:fw_version)`
+- `$(agneovo-qxseries:build_date)`
+- `$(agneovo-qxseries:operating_hours)`
 
 ### Notes
 

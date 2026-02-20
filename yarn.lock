@@ -958,9 +958,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"companion-module-ag-neovo@workspace:.":
+"companion-module-agneovo-qxseries@workspace:.":
   version: 0.0.0-use.local
-  resolution: "companion-module-ag-neovo@workspace:."
+  resolution: "companion-module-agneovo-qxseries@workspace:."
   dependencies:
     "@companion-module/base": "npm:~1.14.1"
     "@companion-module/tools": "npm:^2.6.1"
