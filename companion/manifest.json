@@ -1,5 +1,5 @@
 {
-	"id": "AG-Neovo",
+	"id": "ag-neovo",
 	"name": "AG-Neovo",
 	"shortname": "AG-Neovo",
 	"description": "A module to remotely control AG-Neovo monitors via the IP Serial Interface",
