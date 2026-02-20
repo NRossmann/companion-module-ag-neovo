@@ -8,7 +8,8 @@ export const NeovoCommands = {
 	inputGet: 0xad,
 	volumeSet: 0x44,
 	volumeGet: 0x45,
-	deviceInfo: 0xa1,
+	brightnessSet: 0xc0,
+	brightnessGet: 0xc1,
 	platformInfo: 0xa2,
 	miscInfo: 0x0f,
 } as const
@@ -19,28 +20,13 @@ export const PowerStateValues = {
 } as const
 
 export const InputSources = {
-	video: 0x01,
-	svideo: 0x02,
-	component: 0x03,
-	vga: 0x05,
-	hdmi2: 0x06,
-	dp2: 0x07,
-	usb2: 0x08,
-	cardDviD: 0x09,
-	dp1: 0x0a,
-	cardOps: 0x0b,
-	usb1: 0x0c,
-	hdmi: 0x0d,
-	dviD: 0x0e,
-	hdmi3: 0x0f,
-	browser: 0x10,
-	smartCms: 0x11,
-	dms: 0x12,
-	internalStorage: 0x13,
-	mediaPlayer: 0x16,
-	pdfPlayer: 0x17,
-	custom: 0x18,
-	hdmi4: 0x19,
+	vga: 0x20,
+	dvi: 0x21,
+	hdmi: 0x22,
+	dp: 0x23,
+	noSignal: 0xff,
+	dviD: 0x21,
+	dp1: 0x23,
 } as const
 
 export type InputSourceKey = keyof typeof InputSources
@@ -145,7 +131,8 @@ export class AgNeovoClient extends EventEmitter {
 	}
 
 	async setVolume(volume: number, audioOutVolume: number): Promise<void> {
-		await this.sendCommand(NeovoCommands.volumeSet, [volume, audioOutVolume], { expectReportCode: undefined })
+		void audioOutVolume
+		await this.sendCommand(NeovoCommands.volumeSet, [volume], { expectReportCode: undefined })
 	}
 
 	async getVolume(): Promise<{ volume: number; audioOutVolume: number } | undefined> {
@@ -157,15 +144,15 @@ export class AgNeovoClient extends EventEmitter {
 		return { volume: response[0], audioOutVolume: response[1] }
 	}
 
-	async getDeviceInfo(item: number): Promise<string | undefined> {
-		const response = await this.sendCommand(NeovoCommands.deviceInfo, [item], {
-			expectReportCode: NeovoCommands.deviceInfo,
+	async getBrightness(): Promise<number | undefined> {
+		const response = await this.sendCommand(NeovoCommands.brightnessGet, [], {
+			expectReportCode: NeovoCommands.brightnessGet,
 		})
-		if (!response || response.length === 0) return undefined
-		if (response.length === 1 && response[0] < 0x20) {
-			return `Unsupported (0x${response[0].toString(16).padStart(2, '0')})`
-		}
-		return Buffer.from(response).toString('utf8').replace(/\0/g, '').trim()
+		return response?.[0]
+	}
+
+	async setBrightness(brightness: number): Promise<void> {
+		await this.sendCommand(NeovoCommands.brightnessSet, [brightness], { expectReportCode: undefined })
 	}
 
 	async getOperatingHours(): Promise<number | undefined> {
@@ -281,6 +268,7 @@ export class AgNeovoClient extends EventEmitter {
 		}
 
 		const commandCode = frame.data[0]
+		const activeCommandCode = current.packet[7] ?? 0xff
 		if (commandCode === 0x00) {
 			const status = frame.data[1] ?? 0xff
 			if (status !== 0x00) {
@@ -291,6 +279,11 @@ export class AgNeovoClient extends EventEmitter {
 			if (current.expectReportCode === undefined) {
 				this.resolveCurrentSuccess(null)
 			}
+			return
+		}
+
+		if (current.expectReportCode === undefined && commandCode === activeCommandCode) {
+			this.resolveCurrentSuccess(frame.data.slice(1))
 			return
 		}
 

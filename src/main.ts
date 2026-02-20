@@ -16,6 +16,7 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 		connection: 'disconnected',
 		power: 'unknown',
 		inputCode: null,
+		brightness: null,
 		volume: null,
 		audioOutVolume: null,
 		model: '',
@@ -96,6 +97,15 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 		await this.client.setVolume(clipped, audioOut)
 		this.state.volume = clipped
 		this.state.audioOutVolume = audioOut
+		this.updateAllVariables()
+		this.checkFeedbacks()
+	}
+
+	async actionSetBrightness(brightness: number): Promise<void> {
+		if (!this.client?.isConnected) throw new Error('Not connected')
+		const clipped = clampPercent(brightness)
+		await this.client.setBrightness(clipped)
+		this.state.brightness = (await this.client.getBrightness()) ?? clipped
 		this.updateAllVariables()
 		this.checkFeedbacks()
 	}
@@ -230,6 +240,7 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 		this.state.connection = 'disconnected'
 		this.state.power = 'unknown'
 		this.state.inputCode = null
+		this.state.brightness = null
 		this.state.volume = null
 		this.state.audioOutVolume = null
 		this.updateStatus(InstanceStatus.ConnectionFailure, message)
@@ -264,6 +275,12 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 		}
 
 		try {
+			this.state.brightness = (await this.client.getBrightness()) ?? this.state.brightness
+		} catch (error) {
+			this.log(isRejectedCommandError(error) ? 'debug' : 'warn', `Brightness poll failed: ${formatError(error)}`)
+		}
+
+		try {
 			const volume = await this.client.getVolume()
 			if (volume) {
 				this.state.volume = volume.volume
@@ -274,18 +291,9 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 		}
 
 		try {
-			const modelInfo = await this.client.getDeviceInfo(0x00)
-			const fwInfo = await this.client.getDeviceInfo(0x01)
-			const buildInfo = await this.client.getDeviceInfo(0x02)
-
-			const platformLabel = isUnsupportedInfo(modelInfo) ? await this.client.getPlatformInfo(0x01) : undefined
-			const platformVersion = isUnsupportedInfo(fwInfo) ? await this.client.getPlatformInfo(0x02) : undefined
-			const sicpVersion = isUnsupportedInfo(buildInfo) ? await this.client.getPlatformInfo(0x00) : undefined
-
-			this.state.model = platformLabel ?? modelInfo ?? this.state.model
-			this.state.fwVersion =
-				platformVersion ?? (isUnsupportedInfo(fwInfo) ? sicpVersion : fwInfo) ?? this.state.fwVersion
-			this.state.buildDate = sicpVersion ?? buildInfo ?? this.state.buildDate
+			this.state.model = (await this.client.getPlatformInfo(0x01)) ?? this.state.model
+			this.state.fwVersion = (await this.client.getPlatformInfo(0x00)) ?? this.state.fwVersion
+			this.state.buildDate = ''
 		} catch (error) {
 			this.log('debug', `Device info poll failed: ${formatError(error)}`)
 		}
@@ -307,6 +315,7 @@ export class ModuleInstance extends InstanceBase<ModuleConfig> {
 			power: this.state.power,
 			input_code: this.state.inputCode === null ? '' : String(this.state.inputCode),
 			input_label: inputCodeToLabel(this.state.inputCode),
+			brightness: this.state.brightness === null ? '' : String(this.state.brightness),
 			volume: this.state.volume === null ? '' : String(this.state.volume),
 			audio_out_volume: this.state.audioOutVolume === null ? '' : String(this.state.audioOutVolume),
 			model: this.state.model,
@@ -335,8 +344,4 @@ function formatError(error: unknown): string {
 function isRejectedCommandError(error: unknown): boolean {
 	if (!(error instanceof Error)) return false
 	return error.message === 'Command canceled or NACK' || error.message === 'Parse error or NAV'
-}
-
-function isUnsupportedInfo(value: string | undefined): boolean {
-	return Boolean(value?.startsWith('Unsupported (0x'))
 }

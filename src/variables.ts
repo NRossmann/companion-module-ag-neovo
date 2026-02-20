@@ -6,6 +6,7 @@ export function UpdateVariableDefinitions(self: ModuleInstance): void {
 		{ variableId: 'power', name: 'Power state' },
 		{ variableId: 'input_code', name: 'Input code' },
 		{ variableId: 'input_label', name: 'Input label' },
+		{ variableId: 'brightness', name: 'Brightness (0-100)' },
 		{ variableId: 'volume', name: 'Speaker volume (0-100)' },
 		{ variableId: 'audio_out_volume', name: 'Audio out volume (0-100)' },
 		{ variableId: 'model', name: 'Model number' },

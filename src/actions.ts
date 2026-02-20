@@ -52,6 +52,22 @@ export function UpdateActions(self: ModuleInstance): void {
 				await self.actionSetVolume(Number(event.options.volume))
 			},
 		},
+		set_brightness: {
+			name: 'Set brightness',
+			options: [
+				{
+					id: 'brightness',
+					type: 'number',
+					label: 'Brightness (0-100)',
+					default: 50,
+					min: 0,
+					max: 100,
+				},
+			],
+			callback: async (event) => {
+				await self.actionSetBrightness(Number(event.options.brightness))
+			},
+		},
 		adjust_volume: {
 			name: 'Adjust volume by delta',
 			options: [

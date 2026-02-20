@@ -12,8 +12,9 @@ This module controls AG Neovo displays that support the SICP RS232 protocol over
 
 - Power on/off
 - Input source switching
+- Brightness set/read (0-100)
 - Volume set and relative volume up/down
-- Device info readout: model number, firmware version, build date
+- Device info readout: model number and firmware version
 - Operating hours readout
 
 ### Feedbacks
@@ -28,6 +29,7 @@ This module controls AG Neovo displays that support the SICP RS232 protocol over
 - `$(ag-neovo:power)`
 - `$(ag-neovo:input_code)`
 - `$(ag-neovo:input_label)`
+- `$(ag-neovo:brightness)`
 - `$(ag-neovo:volume)`
 - `$(ag-neovo:audio_out_volume)`
 - `$(ag-neovo:model)`
